@@ -24,6 +24,8 @@ return function(State, Utils, Minimap, Status, Vehicle, readyToRock, Config)
 
     -- -------------------------------------------------------------------------
     -- ESX-Legacy: player logout / unload
+    -- esx:onPlayerLogout is triggered locally by the framework (TriggerEvent),
+    -- so RegisterNetEvent is NOT required — AddEventHandler alone is correct.
     -- Replaces: QBCore:Client:OnPlayerUnload
     -- -------------------------------------------------------------------------
     AddEventHandler('esx:onPlayerLogout', function()
@@ -36,7 +38,7 @@ return function(State, Utils, Minimap, Status, Vehicle, readyToRock, Config)
     end)
 
     -- -------------------------------------------------------------------------
-    -- spawnmanager: still valid in ESX-Legacy
+    -- spawnmanager: fired locally, AddEventHandler only is correct
     -- -------------------------------------------------------------------------
     AddEventHandler('playerSpawned', function()
         State.actuallySpawned = true
@@ -46,7 +48,7 @@ return function(State, Utils, Minimap, Status, Vehicle, readyToRock, Config)
     end)
 
     -- -------------------------------------------------------------------------
-    -- Resource restart recovery
+    -- Resource restart recovery — fired locally, no RegisterNetEvent needed
     -- Replaces: LocalPlayer.state.isLoggedIn check with ESX.IsPlayerLoaded()
     -- -------------------------------------------------------------------------
     AddEventHandler('onResourceStart', function(res)
@@ -79,9 +81,9 @@ return function(State, Utils, Minimap, Status, Vehicle, readyToRock, Config)
             State.whoAmI.money = State.whoAmI.money or {}
             for _, acc in ipairs(value) do
                 if acc.name == 'money' then
-                    State.whoAmI.money.cash  = acc.money or 0
+                    State.whoAmI.money.cash = acc.money or 0
                 elseif acc.name == 'bank' then
-                    State.whoAmI.money.bank  = acc.money or 0
+                    State.whoAmI.money.bank = acc.money or 0
                 end
             end
             Status.refreshMoneyCache()
@@ -99,9 +101,13 @@ return function(State, Utils, Minimap, Status, Vehicle, readyToRock, Config)
     end)
 
     -- -------------------------------------------------------------------------
-    -- Custom need-sync event — unchanged, not framework-specific
+    -- Hunger/thirst sync — network event sent from external resources
+    -- FIX: was RegisterNetEvent('hud:client:UpdateNeeds', function...)
+    --      RegisterNetEvent() ignores any second argument; the handler was
+    --      never registered. Split into correct two-call pattern.
     -- -------------------------------------------------------------------------
-    RegisterNetEvent('hud:client:UpdateNeeds', function(hunger, thirst)
+    RegisterNetEvent('hud:client:UpdateNeeds')
+    AddEventHandler('hud:client:UpdateNeeds', function(hunger, thirst)
         State.whoAmI.metadata        = State.whoAmI.metadata or {}
         State.whoAmI.metadata.hunger = hunger
         State.whoAmI.metadata.thirst = thirst
@@ -109,18 +115,23 @@ return function(State, Utils, Minimap, Status, Vehicle, readyToRock, Config)
     end)
 
     -- -------------------------------------------------------------------------
-    -- pma-voice — unchanged
+    -- pma-voice mode sync — network event from pma-voice resource
+    -- FIX: same bug as above — handler was silently dropped by RegisterNetEvent.
     -- -------------------------------------------------------------------------
-    RegisterNetEvent('pma-voice:setTalkingMode', function(mode)
+    RegisterNetEvent('pma-voice:setTalkingMode')
+    AddEventHandler('pma-voice:setTalkingMode', function(mode)
         local modes = { [1] = 'Whisper', [2] = 'Normal', [3] = 'Shout' }
         State.voiceLabel = modes[mode] or Config.DefaultVoice
         if State.hudShowing then Status.pushStatus(false) end
     end)
 
     -- -------------------------------------------------------------------------
-    -- Version check result — unchanged
+    -- Version check result — network event from server/version.lua
+    -- FIX: same bug as above — handler was silently dropped by RegisterNetEvent.
+    --      Version badge in /hud menu would never update.
     -- -------------------------------------------------------------------------
-    RegisterNetEvent('cx-hud:versionResult', function(current, latest, outdated)
+    RegisterNetEvent('cx-hud:versionResult')
+    AddEventHandler('cx-hud:versionResult', function(current, latest, outdated)
         Utils.yeet('versionInfo', { current = current, latest = latest, outdated = outdated })
     end)
 end
